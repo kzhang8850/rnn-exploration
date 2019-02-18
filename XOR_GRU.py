@@ -14,7 +14,7 @@ class Trainer(object):
     def load_training_data(self):
         self.training_set = np.empty([32, 2])
         self.truth_set = np.empty([32, 1])
-        for _ in range(self.batch_size):
+        for i in range(self.batch_size):
             first = np.random.choice([0, 1])
             second = np.random.choice([0, 1])
             truth = first^second
@@ -30,7 +30,7 @@ class Trainer(object):
     def load_testing_data(self):
         self.training_set = np.empty([100, 2])
         self.truth_set = np.empty([100, 1])
-        for _ in range(100):
+        for i in range(100):
             first = np.random.choice([0, 1])
             second = np.random.choice([0, 1])
             truth = first^second
@@ -45,7 +45,7 @@ class Trainer(object):
 class GRU(nn.Module):
 
     def __init__(self):
-        super(Net, self).__init__()
+        super(GRU, self).__init__()
         self.rnn = nn.GRU(input_size=1,
                         hidden_size=64,
                         num_layers=1,
@@ -55,9 +55,9 @@ class GRU(nn.Module):
 
     def forward(self, input):
         output, hidden = self.rnn(input, None)
-        linearized = self.output(output.view(output.size(0)*output.size(1),output.size(2)))
+        linearized = self.output(output[:, -1, :])
         soft = self.softmax(linearized)
-        return soft.view(output.size(0), output.size(1), output.size(2))
+        return soft
 
 
 
@@ -68,23 +68,26 @@ if __name__ == "__main__":
 
     trainer = Trainer()
 
-    optimizer = optim.Adam(rnn.parameters(), lr=.005)
+    optimizer = optim.Adam(gru.parameters(), lr=.005)
     loss_func = nn.CrossEntropyLoss()
 
     for epoch in range(100):
         for _ in range(100):
             training_set, truth = trainer.load_training_data()
 
-            train = training_set.view(2, -1, 1)
+            train = training_set.view(-1, 2, 1)
+            train = train.float()
             output = gru(train)
             optimizer.zero_grad()
+            truth = truth.long()
+            truth = truth.view(32)
             loss = loss_func(output, truth)
             optimizer.step()
 
 
         testing_set, truth = trainer.load_testing_data()
-        test = testing_set.view(2, -1, 1)
-        test_output = rnn(test)                   # (samples, time_step, input_size)
+        test = testing_set.view(2, -1, 1).float()
+        test_output = gru(test)                   # (samples, time_step, input_size)
         pred_y = torch.max(test_output, 1)[1].numpy()
         accuracy = float((pred_y == truth).astype(int).sum()) / float(truth.size)
         print('Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy(), '| test accuracy: %.2f' % accuracy)
