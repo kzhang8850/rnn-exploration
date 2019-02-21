@@ -5,6 +5,15 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 
+"""
+This script is a Trivial GRU Recurrent Neural Network that can solve the XOR operation
+problem: that is, given the first two binary digits in a length three sequence,
+figure out that the third digit is the XOR operation performed on the first two.
+Includes an easy-to-use data generator for the network, and also visualizations.
+
+by KZ w/ help from Paul Ruvolo
+"""
+
 class Trainer(object):
     """
     A generic XOR data generator
@@ -27,6 +36,7 @@ class Trainer(object):
         will create a different batch size of these data depending on training
         or validating
         """
+
         batch_size = self.train_batch_size if train else self.test_batch_size
         self.training_set = np.empty([batch_size, 2])
         self.truth_set = np.empty([batch_size, 1])
@@ -80,7 +90,6 @@ class GRU(nn.Module):
 
 
 if __name__ == "__main__":
-
     # initialize the network, and print it for good measure
     gru = GRU()
     print(gru)
@@ -98,7 +107,7 @@ if __name__ == "__main__":
     gradients_cache = []
 
     # Training loop
-    for epoch in range(1):
+    for epoch in range(100):
         for _ in range(100):
             # grab a batch of data
             training_set, target = trainer.load_data()
@@ -131,29 +140,38 @@ if __name__ == "__main__":
         accuracy = float((pred_y == truth).astype(int).sum()) / float(truth.size)
         print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy(), '| test accuracy: %.2f' % accuracy
 
+        # record data for visualization later
         loss_cache.append(loss.data.numpy())
         accuracy_cache.append(accuracy*100)
+        if epoch == 0 or epoch == 9 or epoch == 99:
+            current_gradients = []
+            for p in gru.parameters():
+                current_gradients.extend(np.concatenate(p.grad.data.numpy(), axis=None))
+            gradients_cache.append(current_gradients)
 
-    ############################ TODO: finish this histogram stuff
-    for p in gru.parameters():
-        gradients_cache.extend(np.concatenate(p.grad.data.numpy(), axis=None))
 
-    # matplotlib visualizations
+    # Now that training is over, matplotlib visualizations
     plt.figure(1)
     plt.subplot(211)
-    plt.plot(loss_cache, linewidth=2.0)
+    plt.plot(loss_cache, linewidth=5.0)
     plt.title('XOR GRU: Loss Analysis')
     plt.ylabel('Loss')
     plt.axis([0, 100, -.001, 1])
-
     plt.subplot(212)
-    plt.plot(accuracy_cache, color='g', linewidth=2.0)
+    plt.plot(accuracy_cache, color='g', linewidth=5.0)
     plt.title('XOR GRU: Accuracy Analysis')
     plt.ylabel('Accuracy')
     plt.xlabel('Epochs')
     plt.axis([0, 100, 0, 101])
 
     plt.figure(2)
-    plt.hist(gradients_cache, bins=10)
+    bins = np.linspace(-.03, .03, 150, endpoint=False)
+    plt.hist(gradients_cache[0], bins, alpha=0.3, label='Epoch 1', zorder=0)
+    plt.hist(gradients_cache[1], bins, alpha=0.3, label='Epoch 10', zorder=-1)
+    plt.hist(gradients_cache[2], bins, alpha=0.3, label='Epoch 100', zorder=-2)
+    plt.title('XOR GRU: Gradient Analysis')
+    plt.ylabel('Frequency of Gradients per Bin')
+    plt.xlabel('Gradient Values')
+    plt.legend(loc='upper right')
 
     plt.show()
