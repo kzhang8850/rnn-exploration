@@ -26,13 +26,14 @@ class Trainer(object):
     def load_data(self, train=True):
         batch_size = self.train_batch_size if train else self.test_batch_size
         self.training_set = np.empty([batch_size, 4, self.features])
-        self.target_set = np.empty([batch_size, 4, self.features])
+        self.target_set = np.empty([batch_size * 4])
+        index = 0
         for i in range(batch_size):
             d = self.dataset[self.data_index]
             self.data_index = self.data_index + 1 if self.data_index + 1 < len(self.dataset) else 0
 
             train_seq = np.empty([len(d)-1, self.features])
-            target_seq = np.empty([len(d)-1, self.features])
+            target_seq = np.empty([len(d)-1])
             train = d[:-1]
             target = d[1:]
             for j in range(len(train)):
@@ -43,8 +44,8 @@ class Trainer(object):
             for j in range(len(target)):
                 ch = target[j]
                 hot = self.one_hot_encoding(ch)
-                target_seq[j] = hot
-            self.target_set[i] = target_seq
+                self.target_set[index] = np.ravel(np.nonzero(hot))[0]
+                index += 1
 
         torch_train = torch.from_numpy(self.training_set)
         torch_target = torch.from_numpy(self.target_set)
@@ -53,7 +54,7 @@ class Trainer(object):
 
     def one_hot_encoding(self, character):
         one_hot = np.zeros([self.features])
-        index = ord(character) - (ord('a'))
+        index = ord(character) - ord('a')
         one_hot[index] = 1
 
         return one_hot
@@ -61,8 +62,8 @@ class Trainer(object):
 
     def one_hot_decoding(self, one_hot):
         decode = np.ravel(np.nonzero(one_hot))[0]
-        index = (ord('a')) + decode
-        character = chr(index)
+        index = ord('a') + decode
+        character = chr(int(index))
 
         return character
 
@@ -76,15 +77,12 @@ class GRU(nn.Module):
                         num_layers=1,
                         batch_first=True)
         self.output = nn.Linear(h_size, o_size)
-        self.softmax = nn.LogSoftmax(dim=2)
-
 
 
     def forward(self, input):
         output, hidden = self.rnn(input, None)
         linearized = self.output(output)
-        soft = self.softmax(linearized)
-        return soft
+        return linearized
 
 
 
@@ -103,6 +101,9 @@ if __name__=="__main__":
     optimizer = optim.Adam(gru.parameters(), lr=.005)
     loss_func = nn.CrossEntropyLoss()
 
+    loss_cache = []
+    gradients_cache = []
+
     # Training loop
     for epoch in range(100):
         for _ in range(100):
@@ -113,24 +114,22 @@ if __name__=="__main__":
             output = gru(train)
             optimizer.zero_grad()
 
-            target = target_data.long() # TODO: dimensions?
+            target = target_data.long()
+            output = output.view(-1, 26)
 
             loss = loss_func(output, target)
             loss.backward()
             optimizer.step()
 
-        testing_set, truth = trainer.load_data(train=False)
-        test = testing_set.float()
+        # testing_set, truth = trainer.load_data(train=False)
+        # test = testing_set.float()
+        #
+        # test_output = gru(test)
+        # pred_y = torch.max(test_output, 2)[1].numpy()  # TODO: dimensions?
+        # truth = truth.view(trainer.test_batch_size).numpy()  # TODO: dimensions?
+        print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
 
-
-        test_output = gru(test)
-        pred_y = torch.max(test_output, 1)[1].numpy()  # TODO: dimensions?
-        truth = truth.view(trainer.test_batch_size).numpy()  # TODO: dimensions?
-        accuracy = float((pred_y == truth).astype(int).sum()) / float(truth.size)
-        print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy(), '| test accuracy: %.2f' % accuracy
-
-        loss_cache.append(loss.data.numpy())
-        accuracy_cache.append(accuracy*100)
+        # loss_cache.append(loss.data.numpy())
         # if epoch == 0 or epoch == 9 or epoch == 99:
         #     current_gradients = []
         #     for p in gru.parameters():
@@ -138,18 +137,18 @@ if __name__=="__main__":
         #     gradients_cache.append(current_gradients)
 
 
-    plt.figure(1)
-    plt.subplot(211)
-    plt.plot(loss_cache, linewidth=5.0)
-    plt.title('XOR GRU: Loss Analysis')
-    plt.ylabel('Loss')
-    plt.axis([0, 100, -.001, 1])
-    plt.subplot(212)
-    plt.plot(accuracy_cache, color='g', linewidth=5.0)
-    plt.title('XOR GRU: Accuracy Analysis')
-    plt.ylabel('Accuracy')
-    plt.xlabel('Epochs')
-    plt.axis([0, 100, 0, 101])
+    # plt.figure(1)
+    # plt.subplot(211)
+    # plt.plot(loss_cache, linewidth=5.0)
+    # plt.title('XOR GRU: Loss Analysis')
+    # plt.ylabel('Loss')
+    # plt.axis([0, 100, -.001, 1])
+    # plt.subplot(212)
+    # plt.plot(accuracy_cache, color='g', linewidth=5.0)
+    # plt.title('XOR GRU: Accuracy Analysis')
+    # plt.ylabel('Accuracy')
+    # plt.xlabel('Epochs')
+    # plt.axis([0, 100, 0, 101])
     #
     # plt.figure(2)
     # bins = np.linspace(-.03, .03, 150, endpoint=False)
