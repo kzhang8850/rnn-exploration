@@ -25,8 +25,8 @@ class Trainer(object):
 
     def load_data(self, train=True):
         batch_size = self.train_batch_size if train else self.test_batch_size
-        self.training_set = np.empty([batch_size, 4, self.features])
-        self.target_set = np.empty([batch_size * 4])
+        self.training_set = np.empty([batch_size, 6, self.features])
+        self.target_set = np.empty([batch_size * 6])
         index = 0
         for i in range(batch_size):
             d = self.dataset[self.data_index]
@@ -91,21 +91,21 @@ class GRU(nn.Module):
 
 if __name__=="__main__":
 
-    gru = GRU(26, 64, 26)
+    gru = GRU(26, 128, 26)
     print(gru)
 
     trainer = Trainer()
-    dummy_data = "hello " * 100
+    dummy_data = "chicken chimera chilled chickee present precise precede presort presold prewash " * 100
     trainer.set_data(dummy_data)
 
-    optimizer = optim.Adam(gru.parameters(), lr=.005)
+    optimizer = optim.Adam(gru.parameters(), lr=.0005)
     loss_func = nn.CrossEntropyLoss()
 
     loss_cache = []
     gradients_cache = []
 
     # Training loop
-    for epoch in range(7):
+    for epoch in range(100):
         for _ in range(100):
             train_data, target_data = trainer.load_data()
 
@@ -136,27 +136,27 @@ if __name__=="__main__":
         #         current_gradients.extend(np.concatenate(p.grad.data.numpy(), axis=None))
         #     gradients_cache.append(current_gradients)
 
-    with torch.no_grad():
-        input = ""
-        print "Now the fun part :)"
-        while input != "done":
-            output = ""
-            input = raw_input("please input an h: ")
-            output += input
-            for _ in range(4):
-                test_set = np.empty([1, len(output), 26])
-                for i in range(len(output)):
-                    hot = trainer.one_hot_encoding(output[i])
-                    test_set[0][i] = hot
-                torch_input = torch.from_numpy(test_set).float()
-                intermediate = gru(torch_input)
-                predicted = torch.max(intermediate.data, 2)[1].numpy()
-                index = ord('a') + predicted[0][-1]
-                next = chr(index)
-                output+= next
+    # with torch.no_grad():
+    #     input = ""
+    #     print "Now the fun part :)"
+    #     while input != "done":
+    #         output = ""
+    #         input = raw_input("please input an h: ")
+    #         output += input
+    #         for _ in range(4):
+    #             test_set = np.empty([1, len(output), 26])
+    #             for i in range(len(output)):
+    #                 hot = trainer.one_hot_encoding(output[i])
+    #                 test_set[0][i] = hot
+    #             torch_input = torch.from_numpy(test_set).float()
+    #             intermediate = gru(torch_input)
+    #             predicted = torch.max(intermediate.data, 2)[1].numpy()
+    #             index = ord('a') + predicted[0][-1]
+    #             next = chr(index)
+    #             output+= next
+    #
+    #         print "The output from giving an 'h' is: ", output
 
-            print "The output from giving an 'h' is: ", output
-        
 
     # plt.figure(1)
     # plt.subplot(211)
