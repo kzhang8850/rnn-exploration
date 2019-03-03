@@ -105,7 +105,7 @@ if __name__=="__main__":
     gradients_cache = []
 
     # Training loop
-    for epoch in range(100):
+    for epoch in range(35):
         for _ in range(100):
             train_data, target_data = trainer.load_data()
 
@@ -136,26 +136,47 @@ if __name__=="__main__":
         #         current_gradients.extend(np.concatenate(p.grad.data.numpy(), axis=None))
         #     gradients_cache.append(current_gradients)
 
-    # with torch.no_grad():
-    #     input = ""
-    #     print "Now the fun part :)"
-    #     while input != "done":
-    #         output = ""
-    #         input = raw_input("please input an h: ")
-    #         output += input
-    #         for _ in range(4):
-    #             test_set = np.empty([1, len(output), 26])
-    #             for i in range(len(output)):
-    #                 hot = trainer.one_hot_encoding(output[i])
-    #                 test_set[0][i] = hot
-    #             torch_input = torch.from_numpy(test_set).float()
-    #             intermediate = gru(torch_input)
-    #             predicted = torch.max(intermediate.data, 2)[1].numpy()
-    #             index = ord('a') + predicted[0][-1]
-    #             next = chr(index)
-    #             output+= next
-    #
-    #         print "The output from giving an 'h' is: ", output
+    with torch.no_grad():
+        input = ""
+        print "Now the fun part :)"
+        while input != "done":
+            output = ""
+            input = raw_input("please give a prefix input: ")
+            output += input
+            for _ in range(1):
+                test_set = np.empty([1, len(output), 26])
+                for i in range(len(output)):
+                    hot = trainer.one_hot_encoding(output[i])
+                    test_set[0][i] = hot
+                torch_input = torch.from_numpy(test_set).float()
+                intermediate = gru(torch_input)
+                predicted = torch.max(intermediate.data, 2)[1].numpy()
+                print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
+                index = ord('a') + predicted[0][-1]
+                next = chr(index)
+                print "Next letter by highest probability ", next
+                # output+= next
+
+
+
+            output = ""
+            input = raw_input("please a full word input: ")
+            output += input
+            for _ in range(4):
+                test_set = np.empty([1, len(output), 26])
+                for i in range(len(output)):
+                    hot = trainer.one_hot_encoding(output[i])
+                    test_set[0][i] = hot
+                torch_input = torch.from_numpy(test_set).float()
+                intermediate = gru(torch_input)
+                predicted = torch.max(intermediate.data, 2)[1].numpy()
+                index = ord('a') + predicted[0][-1]
+                next = chr(index)
+                output+= next
+
+            print "The output from giving ", input, " is: ", output
+
+            # print "The output from giving an 'h' is: ", output
 
 
     # plt.figure(1)
@@ -181,4 +202,4 @@ if __name__=="__main__":
     # plt.xlabel('Gradient Values')
     # plt.legend(loc='upper right')
 
-    plt.show()
+    # plt.show()
