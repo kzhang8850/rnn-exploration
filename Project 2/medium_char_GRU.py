@@ -95,8 +95,7 @@ if __name__=="__main__":
     print(gru)
 
     trainer = Trainer()
-    # dummy_data = "chicken chimera chilled chickee present precise precede presort presold prewash " * 100
-    dummy_data = "autonomy automan automatic autograph automobile autotransformer autobiography autocracy autoimmune autotrophic chickadee chickenshit chickens chickaree chicks bigmouth biggie bigotry biggity biggest"
+    dummy_data = "chicken chimera chilled chickee present precise precede presort presold prewash " * 100
     trainer.set_data(dummy_data)
 
     optimizer = optim.Adam(gru.parameters(), lr=.0005)
