@@ -36,7 +36,7 @@ class Trainer(object):
         self.training_set = []
         self.target_set = []
         for b in batch:
-            seq_lens.append(len(b))
+            seq_lens.append(len(b)-1)
             train_seq = np.empty([len(b)-1, self.features])
             train = b[:-1]
             target = b[1:]
@@ -44,18 +44,16 @@ class Trainer(object):
                 ch = train[j]
                 hot = self.one_hot_encoding(ch)
                 train_seq[j] = hot
-            self.training_set.append(torch.from_numpy(train_seq))
+            self.training_set.append(torch.from_numpy(train_seq).float())
 
             for j in range(len(target)):
                 ch = target[j]
                 hot = self.one_hot_encoding(ch)
                 self.target_set.append(np.ravel(np.nonzero(hot))[0])
 
-        self.training_set = nn.utils.rnn.pad_sequence(self.training_set, batch_first=True)
         self.target_set = torch.from_numpy(np.array(self.target_set))
-        self.training_set = nn.utils.rnn.pack_padded_sequence(self.training_set, seq_lens, batch_first=True)
 
-        return self.training_set, self.target_set
+        return self.training_set, seq_lens, self.target_set
 
 
     def one_hot_encoding(self, character):
@@ -85,10 +83,16 @@ class GRU(nn.Module):
         self.output = nn.Linear(h_size, o_size)
 
 
-    def forward(self, input):
+    def forward(self, input, input_lens):
+        input = nn.utils.rnn.pad_sequence(input, batch_first=True)
+        input = nn.utils.rnn.pack_padded_sequence(input, input_lens, batch_first=True)
         output, hidden = self.rnn(input, None)
-        linearized = self.output(output)
-        return linearized
+        outputs, output_lengths = nn.utils.rnn.pad_packed_sequence(output, padding_value=-100, batch_first=True)
+        #TODO the padded values being lost in linear layer, so i can compute loss below properly
+        linearized = self.output(outputs)
+        print outputs
+        print linearized
+        return outputs
 
 
 
@@ -110,25 +114,25 @@ if __name__=="__main__":
     loss_cache = []
     gradients_cache = []
 
-    # # Training loop
-    # for epoch in range(30):
-    #     for _ in range(100):
-    #         train_data, target_data = trainer.load_data()
-    #
-    #         train = train_data.float()
-    #
-    #         output = gru(train)
-    #         optimizer.zero_grad()
-    #
-    #         target = target_data.long()
-    #         output = output.view(-1, 26)
-    #
-    #         loss = loss_func(output, target)
-    #         loss.backward()
-    #         optimizer.step()
-    #
-    #     print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
-    #
+    # Training loop
+    for epoch in range(30):
+        for _ in range(100):
+            train_data, train_lengths, target_data = trainer.load_data()
+
+            output = gru(train_data, train_lengths)
+            optimizer.zero_grad()
+
+            target = target_data.long()
+            output = output.view(-1, 26)
+            # TODO can't compute loss properly because of padded values and the linear layer
+            # output = torch.where()
+
+            loss = loss_func(output, target)
+            loss.backward()
+            optimizer.step()
+
+        print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
+
     #     # loss_cache.append(loss.data.numpy())
     #     # if epoch == 0 or epoch == 9 or epoch == 99:
     #     #     current_gradients = []
