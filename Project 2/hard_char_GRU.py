@@ -87,11 +87,14 @@ class GRU(nn.Module):
         input = nn.utils.rnn.pad_sequence(input, batch_first=True)
         input = nn.utils.rnn.pack_padded_sequence(input, input_lens, batch_first=True)
         output, hidden = self.rnn(input, None)
-        outputs, output_lengths = nn.utils.rnn.pad_packed_sequence(output, padding_value=-100, batch_first=True)
+        outputs, output_lengths = nn.utils.rnn.pad_packed_sequence(output, padding_value=0, batch_first=True)
         #TODO the padded values being lost in linear layer, so i can compute loss below properly
         linearized = self.output(outputs)
         print outputs
+        print outputs.shape
+        print "Now linear"
         print linearized
+        print linearized.shape
         return outputs
 
 
@@ -126,6 +129,41 @@ if __name__=="__main__":
             output = output.view(-1, 26)
             # TODO can't compute loss properly because of padded values and the linear layer
             # output = torch.where()
+
+            # UPDATE it's possible to get loss to ignore target values i.e. 0 from the calculation, however,
+            # the linear squash removes these 0s from the padded values, so idk how to make linear
+            # not touch the padded values when squashing
+
+
+
+            # B, C, H, W = 10, 3, 4, 4
+            # x = torch.randn(B, C, H, W)
+            # y = torch.where(x > x.view(B, C, -1).mean(2)[:, :, None, None], torch.tensor([1.]), torch.tensor([0.]))
+
+
+
+        # before we calculate the negative log likelihood, we need to mask out the activations
+        # this means we don't want to take into account padded items in the output vector
+        # simplest way to think about this is to flatten ALL sequences into a REALLY long sequence
+        # and calculate the loss on that.
+
+
+        # # create a mask by filtering out all tokens that ARE NOT the padding token
+        # tag_pad_token = self.tags['<PAD>']
+        # mask = (Y > tag_pad_token).float()
+        #
+        # # count how many tokens we have
+        # nb_tokens = int(torch.sum(mask).data[0])
+        #
+        # # pick the values for the label and zero out the rest with the mask
+        # Y_hat = Y_hat[range(Y_hat.shape[0]), Y] * mask
+        #
+        # # compute cross entropy loss which ignores all <PAD> tokens
+        # ce_loss = -torch.sum(Y_hat) / nb_tokens
+        #
+        #
+
+
 
             loss = loss_func(output, target)
             loss.backward()

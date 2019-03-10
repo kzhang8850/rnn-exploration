@@ -16,40 +16,36 @@ class Trainer(object):
         self.target_set = None
         self.dataset = None
         self.data_index = 0
+        self.char_to_ix = {}
 
 
     def set_data(self, data):
-        data = data.split(" ")[:-1]
+        data = data.split()
         self.dataset = data
+        # vocab = set(self.dataset)
+        letters = "abcdefghijklmnopqrstuvwxyz"
+        self.char_to_ix = {char: i for i, char in enumerate(letters)}
 
 
     def load_data(self, train=True):
         batch_size = self.train_batch_size if train else self.test_batch_size
-        self.training_set = np.empty([batch_size, 6, self.features])
-        self.target_set = np.empty([batch_size * 6])
-        index = 0
+        self.training_set = []
+        self.target_set = []
         for i in range(batch_size):
             d = self.dataset[self.data_index]
             self.data_index = self.data_index + 1 if self.data_index + 1 < len(self.dataset) else 0
 
-            train_seq = np.empty([len(d)-1, self.features])
-            target_seq = np.empty([len(d)-1])
+            train_seq = []
+            target_seq = []
             train = d[:-1]
             target = d[1:]
-            for j in range(len(train)):
-                ch = train[j]
-                hot = self.one_hot_encoding(ch)
-                train_seq[j] = hot
-            self.training_set[i] = train_seq
-            for j in range(len(target)):
-                ch = target[j]
-                hot = self.one_hot_encoding(ch)
-                self.target_set[index] = np.ravel(np.nonzero(hot))[0]
-                index += 1
+            for ch in train:
+                train_seq.append(ch)
+            self.training_set.append(train_seq)
+            for ch in target:
+                self.target_set.append(ch)
 
-        torch_train = torch.from_numpy(self.training_set)
-        torch_target = torch.from_numpy(self.target_set)
-        return torch_train, torch_target
+        return self.training_set, self.target_set
 
 
     def one_hot_encoding(self, character):
@@ -70,17 +66,19 @@ class Trainer(object):
 
 class GRU(nn.Module):
 
-    def __init__(self, i_size, h_size, o_size):
+    def __init__(self, v_size, i_size, h_size):
         super(GRU, self).__init__()
+        self.embed = nn.Embedding(v_size, i_size)
         self.rnn = nn.GRU(input_size=i_size,
                         hidden_size=h_size,
                         num_layers=1,
                         batch_first=True)
-        self.output = nn.Linear(h_size, o_size)
+        self.output = nn.Linear(h_size, v_size)
 
 
     def forward(self, input):
-        output, hidden = self.rnn(input, None)
+        embeds = self.embed(input)
+        output, hidden = self.rnn(embeds, None)
         linearized = self.output(output)
         return linearized
 
@@ -91,11 +89,11 @@ class GRU(nn.Module):
 
 if __name__=="__main__":
 
-    gru = GRU(26, 128, 26)
+    gru = GRU(26, 2, 128)
     print(gru)
 
     trainer = Trainer()
-    dummy_data = "chicken chimera chilled chickee present precise precede presort presold prewash " * 100
+    dummy_data = "chicken chimera chilled chickee present precise precede presort presold prewash"
     trainer.set_data(dummy_data)
 
     optimizer = optim.Adam(gru.parameters(), lr=.0005)
@@ -109,12 +107,14 @@ if __name__=="__main__":
         for _ in range(100):
             train_data, target_data = trainer.load_data()
 
-            train = train_data.float()
+            train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in word] for word in train_data],
+                                        dtype=torch.long)
 
-            output = gru(train)
+
+            output = gru(train_ix)
             optimizer.zero_grad()
 
-            target = target_data.long()
+            target = torch.tensor([trainer.char_to_ix[ch] for ch in target_data], dtype=torch.long)
             output = output.view(-1, 26)
 
             loss = loss_func(output, target)
@@ -144,18 +144,13 @@ if __name__=="__main__":
             input = raw_input("please give a prefix input: ")
             output += input
             for _ in range(1):
-                test_set = np.empty([1, len(output), 26])
-                for i in range(len(output)):
-                    hot = trainer.one_hot_encoding(output[i])
-                    test_set[0][i] = hot
-                torch_input = torch.from_numpy(test_set).float()
-                intermediate = gru(torch_input)
+                train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
+                intermediate = gru(train_ix)
                 predicted = torch.max(intermediate.data, 2)[1].numpy()
                 print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
                 index = ord('a') + predicted[0][-1]
                 next = chr(index)
                 print "Next letter by highest probability ", next
-                # output+= next
 
 
 
