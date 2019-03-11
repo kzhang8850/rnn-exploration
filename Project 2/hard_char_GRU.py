@@ -87,15 +87,17 @@ class GRU(nn.Module):
         input = nn.utils.rnn.pad_sequence(input, batch_first=True)
         input = nn.utils.rnn.pack_padded_sequence(input, input_lens, batch_first=True)
         output, hidden = self.rnn(input, None)
-        outputs, output_lengths = nn.utils.rnn.pad_packed_sequence(output, padding_value=0, batch_first=True)
         #TODO the padded values being lost in linear layer, so i can compute loss below properly
-        linearized = self.output(outputs)
-        print outputs
-        print outputs.shape
-        print "Now linear"
-        print linearized
-        print linearized.shape
-        return outputs
+        linearized = self.output(output[0])
+        # linearized = nn.utils.rnn.pack_padded_sequence(linearized, input_lens, batch_first=True)
+        # outputs, output_lengths = nn.utils.rnn.pad_packed_sequence(linearized, padding_value=0, batch_first=True)
+
+        # print output
+        # print output.shape
+        # print "Now linear"
+        # print outputs
+        # print linearized.shape
+        return linearized
 
 
 
@@ -111,14 +113,14 @@ if __name__=="__main__":
     dummy_data = "autonomy automan automatic autograph automobile autotransformer autobiography autocracy autoimmune autotrophic chickadee chickenshit chickens chickaree chicks bigmouth biggie bigotry biggity biggest " * 100
     trainer.set_data(dummy_data)
 
-    optimizer = optim.Adam(gru.parameters(), lr=.0005)
+    optimizer = optim.Adam(gru.parameters(), lr=.001)
     loss_func = nn.CrossEntropyLoss()
 
     loss_cache = []
     gradients_cache = []
 
     # Training loop
-    for epoch in range(30):
+    for epoch in range(100):
         for _ in range(100):
             train_data, train_lengths, target_data = trainer.load_data()
 
@@ -126,7 +128,7 @@ if __name__=="__main__":
             optimizer.zero_grad()
 
             target = target_data.long()
-            output = output.view(-1, 26)
+            # output = output.view(-1, 26)
             # TODO can't compute loss properly because of padded values and the linear layer
             # output = torch.where()
 
@@ -178,25 +180,28 @@ if __name__=="__main__":
     #     #         current_gradients.extend(np.concatenate(p.grad.data.numpy(), axis=None))
     #     #     gradients_cache.append(current_gradients)
     #
-    # with torch.no_grad():
-    #     input = ""
-    #     print "Now the fun part :)"
-    #     while input != "done":
-    #         output = ""
-    #         input = raw_input("please give a prefix input: ")
-    #         output += input
-    #         for _ in range(1):
-    #             test_set = np.empty([1, len(output), 26])
-    #             for i in range(len(output)):
-    #                 hot = trainer.one_hot_encoding(output[i])
-    #                 test_set[0][i] = hot
-    #             torch_input = torch.from_numpy(test_set).float()
-    #             intermediate = gru(torch_input)
-    #             predicted = torch.max(intermediate.data, 2)[1].numpy()
-    #             print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
-    #             index = ord('a') + predicted[0][-1]
-    #             next = chr(index)
-    #             print "Next letter by highest probability ", next
+    with torch.no_grad():
+        input = ""
+        print "Now the fun part :)"
+        while input != "done":
+            output = ""
+            input = raw_input("please give a prefix input: ")
+            output += input
+            for _ in range(1):
+                test_set = np.empty([1, len(output), 26])
+                for i in range(len(output)):
+                    hot = trainer.one_hot_encoding(output[i])
+                    test_set[0][i] = hot
+                torch_input = torch.from_numpy(test_set).float()
+                input_lens = []
+                input_lens.append(len(input))
+                intermediate = gru(torch_input, input_lens)
+                print intermediate.shape
+                predicted = torch.max(intermediate.data, 1)[1].numpy()
+                print "distribution ", F.softmax(intermediate, dim=1)[-1]
+                # index = ord('a') + predicted[0][-1]
+                # next = chr(index)
+                # print "Next letter by highest probability ", next
 
 
 
