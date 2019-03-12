@@ -16,11 +16,16 @@ class Trainer(object):
         self.target_set = None
         self.dataset = None
         self.data_index = 0
+        self.char_to_ix = {}
 
 
     def set_data(self, data):
-        data = data.split(" ")[:-1]
+        data = data.split()
         self.dataset = data
+        # vocab = set(self.dataset)
+        letters = "abcdefghijklmnopqrstuvwxyz"
+        self.char_to_ix = {char: i for i, char in enumerate(letters)}
+        self.char_to_ix["<PAD>"] = 26
 
 
     def load_data(self, train=True):
@@ -33,49 +38,35 @@ class Trainer(object):
         batch = np.array(batch)
 
         seq_lens = []
+        longest = len(batch[0])-1
         self.training_set = []
         self.target_set = []
         for b in batch:
             seq_lens.append(len(b)-1)
-            train_seq = np.empty([len(b)-1, self.features])
+            train_seq = []
+            target_seq = []
             train = b[:-1]
             target = b[1:]
-            for j in range(len(train)):
-                ch = train[j]
-                hot = self.one_hot_encoding(ch)
-                train_seq[j] = hot
-            self.training_set.append(torch.from_numpy(train_seq).float())
-
-            for j in range(len(target)):
-                ch = target[j]
-                hot = self.one_hot_encoding(ch)
-                self.target_set.append(np.ravel(np.nonzero(hot))[0])
-
-        self.target_set = torch.from_numpy(np.array(self.target_set))
+            for ch in train:
+                train_seq.append(ch)
+            for j in range(longest-len(train)):
+                train_seq.append("<PAD>")
+            self.training_set.append(train_seq)
+            for ch in target:
+                self.target_set.append(ch)
+            for j in range(longest-len(target)):
+                self.target_set.append("<PAD>")
 
         return self.training_set, seq_lens, self.target_set
 
 
-    def one_hot_encoding(self, character):
-        one_hot = np.zeros([self.features])
-        index = ord(character) - ord('a')
-        one_hot[index] = 1
-
-        return one_hot
-
-
-    def one_hot_decoding(self, one_hot):
-        decode = np.ravel(np.nonzero(one_hot))[0]
-        index = ord('a') + decode
-        character = chr(int(index))
-
-        return character
-
-
 class GRU(nn.Module):
 
-    def __init__(self, i_size, h_size, o_size):
+    def __init__(self, v_size, i_size, h_size, o_size, pad_idx):
         super(GRU, self).__init__()
+        self.embed = nn.Embedding(num_embeddings=v_size,
+                                embedding_dim=i_size,
+                                padding_idx=pad_idx)
         self.rnn = nn.GRU(input_size=i_size,
                         hidden_size=h_size,
                         num_layers=1,
@@ -84,37 +75,26 @@ class GRU(nn.Module):
 
 
     def forward(self, input, input_lens):
-        input = nn.utils.rnn.pad_sequence(input, batch_first=True)
-        input = nn.utils.rnn.pack_padded_sequence(input, input_lens, batch_first=True)
-        output, hidden = self.rnn(input, None)
-        #TODO the padded values being lost in linear layer, so i can compute loss below properly
-        linearized = self.output(output[0])
-        # linearized = nn.utils.rnn.pack_padded_sequence(linearized, input_lens, batch_first=True)
-        # outputs, output_lengths = nn.utils.rnn.pad_packed_sequence(linearized, padding_value=0, batch_first=True)
+        embeds = self.embed(input)
+        new_input = nn.utils.rnn.pack_padded_sequence(embeds, input_lens, batch_first=True)
+        output, hidden = self.rnn(new_input, None)
+        outputs, output_lengths = nn.utils.rnn.pad_packed_sequence(output, padding_value=0, batch_first=True)
+        linearized = self.output(outputs)
 
-        # print output
-        # print output.shape
-        # print "Now linear"
-        # print outputs
-        # print linearized.shape
         return linearized
-
-
-
-
 
 
 if __name__=="__main__":
 
-    gru = GRU(26, 64, 26)
-    print(gru)
-
     trainer = Trainer()
-    dummy_data = "autonomy automan automatic autograph automobile autotransformer autobiography autocracy autoimmune autotrophic chickadee chickenshit chickens chickaree chicks bigmouth biggie bigotry biggity biggest " * 100
+    dummy_data = "autonomy automan automatic autograph automobile autotransformer autobiography autocracy autoimmune autotrophic chickadee chickenshit chickens chickaree chicks bigmouth biggie bigotry biggity biggest"
     trainer.set_data(dummy_data)
 
+    gru = GRU(27, 2, 128, 26, trainer.char_to_ix["<PAD>"])
+    print(gru)
+
     optimizer = optim.Adam(gru.parameters(), lr=.001)
-    loss_func = nn.CrossEntropyLoss()
+    loss_func = nn.CrossEntropyLoss(ignore_index=trainer.char_to_ix["<PAD>"])
 
     loss_cache = []
     gradients_cache = []
@@ -124,48 +104,13 @@ if __name__=="__main__":
         for _ in range(100):
             train_data, train_lengths, target_data = trainer.load_data()
 
-            output = gru(train_data, train_lengths)
+            train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in word] for word in train_data],
+                                        dtype=torch.long)
+
+            output = gru(train_ix, train_lengths)
             optimizer.zero_grad()
-
-            target = target_data.long()
-            # output = output.view(-1, 26)
-            # TODO can't compute loss properly because of padded values and the linear layer
-            # output = torch.where()
-
-            # UPDATE it's possible to get loss to ignore target values i.e. 0 from the calculation, however,
-            # the linear squash removes these 0s from the padded values, so idk how to make linear
-            # not touch the padded values when squashing
-
-
-
-            # B, C, H, W = 10, 3, 4, 4
-            # x = torch.randn(B, C, H, W)
-            # y = torch.where(x > x.view(B, C, -1).mean(2)[:, :, None, None], torch.tensor([1.]), torch.tensor([0.]))
-
-
-
-        # before we calculate the negative log likelihood, we need to mask out the activations
-        # this means we don't want to take into account padded items in the output vector
-        # simplest way to think about this is to flatten ALL sequences into a REALLY long sequence
-        # and calculate the loss on that.
-
-
-        # # create a mask by filtering out all tokens that ARE NOT the padding token
-        # tag_pad_token = self.tags['<PAD>']
-        # mask = (Y > tag_pad_token).float()
-        #
-        # # count how many tokens we have
-        # nb_tokens = int(torch.sum(mask).data[0])
-        #
-        # # pick the values for the label and zero out the rest with the mask
-        # Y_hat = Y_hat[range(Y_hat.shape[0]), Y] * mask
-        #
-        # # compute cross entropy loss which ignores all <PAD> tokens
-        # ce_loss = -torch.sum(Y_hat) / nb_tokens
-        #
-        #
-
-
+            target = torch.tensor([trainer.char_to_ix[ch] for ch in target_data], dtype=torch.long)
+            output = output.view(-1, 26)
 
             loss = loss_func(output, target)
             loss.backward()
@@ -173,13 +118,9 @@ if __name__=="__main__":
 
         print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
 
-    #     # loss_cache.append(loss.data.numpy())
-    #     # if epoch == 0 or epoch == 9 or epoch == 99:
-    #     #     current_gradients = []
-    #     #     for p in gru.parameters():
-    #     #         current_gradients.extend(np.concatenate(p.grad.data.numpy(), axis=None))
-    #     #     gradients_cache.append(current_gradients)
-    #
+        loss_cache.append(loss.data.numpy())
+
+
     with torch.no_grad():
         input = ""
         print "Now the fun part :)"
@@ -188,20 +129,15 @@ if __name__=="__main__":
             input = raw_input("please give a prefix input: ")
             output += input
             for _ in range(1):
-                test_set = np.empty([1, len(output), 26])
-                for i in range(len(output)):
-                    hot = trainer.one_hot_encoding(output[i])
-                    test_set[0][i] = hot
-                torch_input = torch.from_numpy(test_set).float()
+                train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
                 input_lens = []
                 input_lens.append(len(input))
-                intermediate = gru(torch_input, input_lens)
-                print intermediate.shape
-                predicted = torch.max(intermediate.data, 1)[1].numpy()
-                print "distribution ", F.softmax(intermediate, dim=1)[-1]
-                # index = ord('a') + predicted[0][-1]
-                # next = chr(index)
-                # print "Next letter by highest probability ", next
+                intermediate = gru(train_ix, input_lens)
+                predicted = torch.max(intermediate.data, 2)[1].numpy()
+                print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
+                index = ord('a') + predicted[0][-1]
+                next = chr(index)
+                print "Next letter by highest probability ", next
 
 
 
