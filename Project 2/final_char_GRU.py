@@ -22,6 +22,7 @@ class Trainer(object):
     def set_data(self, data):
         data = data.split()
         self.dataset = data
+
         letters = "abcdefghijklmnopqrstuvwxyz"
         self.char_to_ix = {char: i for i, char in enumerate(letters)}
         self.char_to_ix["<PAD>"] = 26
@@ -91,10 +92,10 @@ if __name__=="__main__":
     torch.manual_seed(0)
 
     trainer = Trainer()
-    dummy_data = "autonomy automan automatic autograph automobile autotransformer autobiography autocracy autoimmune autotrophic chickadee chickenshit chickens chickaree chicks bigmouth biggie bigotry biggity biggest"
-    trainer.set_data(dummy_data)
+    ###### TODO find a dictionary of words for the actual data, no more dummies
+    # trainer.set_data(dummy_data)
 
-    gru = GRU(27, 2, 128, 26, trainer.char_to_ix["<PAD>"])
+    gru = GRU(27, 2, 64, 26, trainer.char_to_ix["<PAD>"])
     print(gru)
 
     optimizer = optim.Adam(gru.parameters(), lr=.001)
@@ -122,48 +123,48 @@ if __name__=="__main__":
 
         print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
 
-        loss_cache.append(loss.data.numpy())
+        # loss_cache.append(loss.data.numpy())
 
 
-    with torch.no_grad():
-        input = ""
-        print "Now the fun part :)"
-        while input != "done":
-            output = ""
-            input = raw_input("please give a prefix input: ")
-            if input != "done":
-                output += input
-                for _ in range(1):
-                    train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
-                    input_lens = []
-                    input_lens.append(len(input))
-                    intermediate = gru(train_ix, input_lens)
-                    predicted = torch.max(intermediate.data, 2)[1].numpy()
-                    print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
-                    index = ord('a') + predicted[0][-1]
-                    next = chr(index)
-                    print "Next letter by highest probability ", next
+    # with torch.no_grad():
+    #     input = ""
+    #     print "Now the fun part :)"
+    #     while input != "done":
+    #         output = ""
+    #         input = raw_input("please give a prefix input: ")
+    #         if input != "done":
+    #             output += input
+    #             for _ in range(1):
+    #                 train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
+    #                 input_lens = []
+    #                 input_lens.append(len(input))
+    #                 intermediate = gru(train_ix, input_lens)
+    #                 predicted = torch.max(intermediate.data, 2)[1].numpy()
+    #                 print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
+    #                 index = ord('a') + predicted[0][-1]
+    #                 next = chr(index)
+    #                 print "Next letter by highest probability ", next
 
-        for letter in "abcdefghijklmnopqrstuvwxyz":
-            embed_input = torch.tensor([trainer.char_to_ix[letter]], dtype=torch.long)
-            embedding = gru.get_embeddings(embed_input)
-            embeddings_cache.append((embedding[0][0].item(), embedding[0][1].item()))
-
-        embeddings_x, embeddings_y = zip(*embeddings_cache)
-
-        plt.figure(1)
-        plt.plot(loss_cache, linewidth=5.0)
-        plt.title('Char GRU: Loss Analysis')
-        plt.ylabel('Loss')
-        plt.axis([0, 100, -.001, 1])
-        plt.xlabel('Epochs')
-
-        plt.figure(2)
-        plt.scatter(embeddings_x, embeddings_y, c="green");
-        for i, txt in enumerate("abcdefghijklmnopqrstuvwxyz"):
-            plt.annotate(txt, (embeddings_x[i], embeddings_y[i]))
-        plt.title('Char GRU: Embeddings Analysis')
-        plt.ylabel('Y Dimension in Embedding Space')
-        plt.xlabel('X Dimension in Embedding Space')
-
-        plt.show()
+        # for letter in "abcdefghijklmnopqrstuvwxyz":
+        #     embed_input = torch.tensor([trainer.char_to_ix[letter]], dtype=torch.long)
+        #     embedding = gru.get_embeddings(embed_input)
+        #     embeddings_cache.append((embedding[0][0].item(), embedding[0][1].item()))
+        #
+        # embeddings_x, embeddings_y = zip(*embeddings_cache)
+        #
+        # plt.figure(1)
+        # plt.plot(loss_cache, linewidth=5.0)
+        # plt.title('Char GRU: Loss Analysis')
+        # plt.ylabel('Loss')
+        # plt.axis([0, 100, -.001, 1])
+        # plt.xlabel('Epochs')
+        #
+        # plt.figure(2)
+        # plt.scatter(embeddings_x, embeddings_y, c="green");
+        # for i, txt in enumerate("abcdefghijklmnopqrstuvwxyz"):
+        #     plt.annotate(txt, (embeddings_x[i], embeddings_y[i]))
+        # plt.title('Char GRU: Embeddings Analysis')
+        # plt.ylabel('Y Dimension in Embedding Space')
+        # plt.xlabel('X Dimension in Embedding Space')
+        #
+        # plt.show()

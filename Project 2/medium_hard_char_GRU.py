@@ -22,7 +22,6 @@ class Trainer(object):
     def set_data(self, data):
         data = data.split()
         self.dataset = data
-        # vocab = set(self.dataset)
         letters = "abcdefghijklmnopqrstuvwxyz"
         self.char_to_ix = {char: i for i, char in enumerate(letters)}
 
