@@ -84,7 +84,12 @@ class GRU(nn.Module):
         return linearized
 
 
+    def get_embeddings(self, input):
+        return self.embed(input)
+
+
 if __name__=="__main__":
+    torch.manual_seed(0)
 
     trainer = Trainer()
     dummy_data = "autonomy automan automatic autograph automobile autotransformer autobiography autocracy autoimmune autotrophic chickadee chickenshit chickens chickaree chicks bigmouth biggie bigotry biggity biggest"
@@ -97,10 +102,10 @@ if __name__=="__main__":
     loss_func = nn.CrossEntropyLoss(ignore_index=trainer.char_to_ix["<PAD>"])
 
     loss_cache = []
-    gradients_cache = []
+    embeddings_cache = []
 
     # Training loop
-    for epoch in range(100):
+    for epoch in range(10):
         for _ in range(100):
             train_data, train_lengths, target_data = trainer.load_data()
 
@@ -127,61 +132,39 @@ if __name__=="__main__":
         while input != "done":
             output = ""
             input = raw_input("please give a prefix input: ")
-            output += input
-            for _ in range(1):
-                train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
-                input_lens = []
-                input_lens.append(len(input))
-                intermediate = gru(train_ix, input_lens)
-                predicted = torch.max(intermediate.data, 2)[1].numpy()
-                print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
-                index = ord('a') + predicted[0][-1]
-                next = chr(index)
-                print "Next letter by highest probability ", next
+            if input != "done":
+                output += input
+                for _ in range(1):
+                    train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
+                    input_lens = []
+                    input_lens.append(len(input))
+                    intermediate = gru(train_ix, input_lens)
+                    predicted = torch.max(intermediate.data, 2)[1].numpy()
+                    print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
+                    index = ord('a') + predicted[0][-1]
+                    next = chr(index)
+                    print "Next letter by highest probability ", next
 
+        for letter in "abcdefghijklmnopqrstuvwxyz":
+            embed_input = torch.tensor([trainer.char_to_ix[letter]], dtype=torch.long)
+            embedding = gru.get_embeddings(embed_input)
+            embeddings_cache.append((embedding[0][0].item(), embedding[0][1].item()))
 
+        embeddings_x, embeddings_y = zip(*embeddings_cache)
 
-            # output = ""
-            # input = raw_input("please a full word input: ")
-            # output += input
-            # for _ in range(4):
-            #     test_set = np.empty([1, len(output), 26])
-            #     for i in range(len(output)):
-            #         hot = trainer.one_hot_encoding(output[i])
-            #         test_set[0][i] = hot
-            #     torch_input = torch.from_numpy(test_set).float()
-            #     intermediate = gru(torch_input)
-            #     predicted = torch.max(intermediate.data, 2)[1].numpy()
-            #     index = ord('a') + predicted[0][-1]
-            #     next = chr(index)
-            #     output+= next
-            #
-            # print "The output from giving ", input, " is: ", output
+        plt.figure(1)
+        plt.plot(loss_cache, linewidth=5.0)
+        plt.title('Char GRU: Loss Analysis')
+        plt.ylabel('Loss')
+        plt.axis([0, 100, -.001, 1])
+        plt.xlabel('Epochs')
 
-            # print "The output from giving an 'h' is: ", output
+        plt.figure(2)
+        plt.scatter(embeddings_x, embeddings_y, c="green");
+        for i, txt in enumerate("abcdefghijklmnopqrstuvwxyz"):
+            plt.annotate(txt, (embeddings_x[i], embeddings_y[i]))
+        plt.title('Char GRU: Embeddings Analysis')
+        plt.ylabel('Y Dimension in Embedding Space')
+        plt.xlabel('X Dimension in Embedding Space')
 
-
-    # plt.figure(1)
-    # plt.subplot(211)
-    # plt.plot(loss_cache, linewidth=5.0)
-    # plt.title('XOR GRU: Loss Analysis')
-    # plt.ylabel('Loss')
-    # plt.axis([0, 100, -.001, 1])
-    # plt.subplot(212)
-    # plt.plot(accuracy_cache, color='g', linewidth=5.0)
-    # plt.title('XOR GRU: Accuracy Analysis')
-    # plt.ylabel('Accuracy')
-    # plt.xlabel('Epochs')
-    # plt.axis([0, 100, 0, 101])
-    #
-    # plt.figure(2)
-    # bins = np.linspace(-.03, .03, 150, endpoint=False)
-    # plt.hist(gradients_cache[0], bins, alpha=0.3, label='Epoch 1', zorder=0)
-    # plt.hist(gradients_cache[1], bins, alpha=0.3, label='Epoch 10', zorder=-1)
-    # plt.hist(gradients_cache[2], bins, alpha=0.3, label='Epoch 100', zorder=-2)
-    # plt.title('XOR GRU: Gradient Analysis')
-    # plt.ylabel('Frequency of Gradients per Bin')
-    # plt.xlabel('Gradient Values')
-    # plt.legend(loc='upper right')
-
-    # plt.show()
+        plt.show()

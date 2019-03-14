@@ -105,7 +105,7 @@ if __name__=="__main__":
     gradients_cache = []
 
     # Training loop
-    for epoch in range(35):
+    for epoch in range(10):
         for _ in range(100):
             train_data, target_data = trainer.load_data()
 
@@ -121,20 +121,14 @@ if __name__=="__main__":
             loss.backward()
             optimizer.step()
 
-        # testing_set, truth = trainer.load_data(train=False)
-        # test = testing_set.float()
-        #
-        # test_output = gru(test)
-        # pred_y = torch.max(test_output, 2)[1].numpy()  # TODO: dimensions?
-        # truth = truth.view(trainer.test_batch_size).numpy()  # TODO: dimensions?
         print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
 
-        # loss_cache.append(loss.data.numpy())
-        # if epoch == 0 or epoch == 9 or epoch == 99:
-        #     current_gradients = []
-        #     for p in gru.parameters():
-        #         current_gradients.extend(np.concatenate(p.grad.data.numpy(), axis=None))
-        #     gradients_cache.append(current_gradients)
+        loss_cache.append(loss.data.numpy())
+        if epoch == 0 or epoch == 9 or epoch == 99:
+            current_gradients = []
+            for p in gru.parameters():
+                current_gradients.extend(np.concatenate(p.grad.data.numpy(), axis=None))
+            gradients_cache.append(current_gradients)
 
     with torch.no_grad():
         input = ""
@@ -155,49 +149,41 @@ if __name__=="__main__":
                 index = ord('a') + predicted[0][-1]
                 next = chr(index)
                 print "Next letter by highest probability ", next
-                # output+= next
 
 
+            output = ""
+            input = raw_input("please a full word input: ")
+            output += input
+            for _ in range(4):
+                test_set = np.empty([1, len(output), 26])
+                for i in range(len(output)):
+                    hot = trainer.one_hot_encoding(output[i])
+                    test_set[0][i] = hot
+                torch_input = torch.from_numpy(test_set).float()
+                intermediate = gru(torch_input)
+                predicted = torch.max(intermediate.data, 2)[1].numpy()
+                index = ord('a') + predicted[0][-1]
+                next = chr(index)
+                output+= next
 
-            # output = ""
-            # input = raw_input("please a full word input: ")
-            # output += input
-            # for _ in range(4):
-            #     test_set = np.empty([1, len(output), 26])
-            #     for i in range(len(output)):
-            #         hot = trainer.one_hot_encoding(output[i])
-            #         test_set[0][i] = hot
-            #     torch_input = torch.from_numpy(test_set).float()
-            #     intermediate = gru(torch_input)
-            #     predicted = torch.max(intermediate.data, 2)[1].numpy()
-            #     index = ord('a') + predicted[0][-1]
-            #     next = chr(index)
-            #     output+= next
-            #
-            # print "The output from giving ", input, " is: ", output
+            print "The output from giving ", input, " is: ", output
 
 
-    # plt.figure(1)
-    # plt.subplot(211)
-    # plt.plot(loss_cache, linewidth=5.0)
-    # plt.title('XOR GRU: Loss Analysis')
-    # plt.ylabel('Loss')
-    # plt.axis([0, 100, -.001, 1])
-    # plt.subplot(212)
-    # plt.plot(accuracy_cache, color='g', linewidth=5.0)
-    # plt.title('XOR GRU: Accuracy Analysis')
-    # plt.ylabel('Accuracy')
-    # plt.xlabel('Epochs')
-    # plt.axis([0, 100, 0, 101])
-    #
-    # plt.figure(2)
-    # bins = np.linspace(-.03, .03, 150, endpoint=False)
-    # plt.hist(gradients_cache[0], bins, alpha=0.3, label='Epoch 1', zorder=0)
-    # plt.hist(gradients_cache[1], bins, alpha=0.3, label='Epoch 10', zorder=-1)
-    # plt.hist(gradients_cache[2], bins, alpha=0.3, label='Epoch 100', zorder=-2)
-    # plt.title('XOR GRU: Gradient Analysis')
-    # plt.ylabel('Frequency of Gradients per Bin')
-    # plt.xlabel('Gradient Values')
-    # plt.legend(loc='upper right')
+    plt.figure(1)
+    plt.plot(loss_cache, linewidth=5.0)
+    plt.title('Char GRU: Loss Analysis')
+    plt.ylabel('Loss')
+    plt.axis([0, 100, -.001, 1])
+    plt.xlabel('Epochs')
 
-    # plt.show()
+    plt.figure(2)
+    bins = np.linspace(-.03, .03, 150, endpoint=False)
+    plt.hist(gradients_cache[0], bins, alpha=0.3, label='Epoch 1', zorder=0)
+    plt.hist(gradients_cache[1], bins, alpha=0.3, label='Epoch 10', zorder=-1)
+    plt.hist(gradients_cache[2], bins, alpha=0.3, label='Epoch 100', zorder=-2)
+    plt.title('Char GRU: Gradient Analysis')
+    plt.ylabel('Frequency of Gradients per Bin')
+    plt.xlabel('Gradient Values')
+    plt.legend(loc='upper right')
+
+    plt.show()
