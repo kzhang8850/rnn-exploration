@@ -15,17 +15,42 @@ class Trainer(object):
         self.training_set = None
         self.target_set = None
         self.dataset = None
+        self.folds = []
+        self.validation_fold = None
         self.data_index = 0
         self.char_to_ix = {}
 
 
     def set_data(self, data):
-        data = data.split()
-        self.dataset = data
+        data = data.split("\n")
+        self.dataset = data[:-1]
+        for d in self.dataset:
+            if len(d) < 2:
+                self.dataset.remove(d)
+        np.random.shuffle(self.dataset)
+        partition_len = len(self.dataset)/10
+        for i in range(0, len(self.dataset), partition_len):
+            self.folds.append(self.dataset[i:i+partition_len])
+        self.folds = self.folds[:-1]
 
         letters = "abcdefghijklmnopqrstuvwxyz"
         self.char_to_ix = {char: i for i, char in enumerate(letters)}
         self.char_to_ix["<PAD>"] = 26
+
+
+    def prepare_training(self, index):
+        self.validation_fold = self.folds[index]
+        self.dataset = []
+        for i in range(len(self.folds)):
+            if i != index:
+                for j in range(len(self.folds[i])):
+                    self.dataset.append(self.folds[i][j])
+
+
+    def prepare_validation(self):
+        self.dataset = self.validation_fold
+        self.data_index = 0
+        self.validation_fold = None
 
 
     def load_data(self, train=True):
@@ -74,6 +99,17 @@ class GRU(nn.Module):
         self.output = nn.Linear(h_size, o_size)
 
 
+    def init_weights(self, m):
+        if type(m) == nn.GRU:
+            torch.nn.init.orthogonal_(m.weight_hh_l0)
+            torch.nn.init.orthogonal_(m.weight_ih_l0)
+            torch.nn.init.normal_(m.bias_hh_l0)
+            torch.nn.init.normal_(m.bias_ih_l0)
+        if type(m) == nn.Linear:
+            torch.nn.init.orthogonal_(m.weight)
+            torch.nn.init.normal_(m.bias)
+
+
     def forward(self, input, input_lens):
         embeds = self.embed(input)
         new_input = nn.utils.rnn.pack_padded_sequence(embeds, input_lens, batch_first=True)
@@ -92,39 +128,64 @@ if __name__=="__main__":
     torch.manual_seed(0)
 
     trainer = Trainer()
-    ###### TODO find a dictionary of words for the actual data, no more dummies
-    # trainer.set_data(dummy_data)
+    with open('words.txt') as f:
+        data = f.read()
+    trainer.set_data(data)
 
     gru = GRU(27, 2, 64, 26, trainer.char_to_ix["<PAD>"])
+    gru.apply(gru.init_weights)
     print(gru)
 
     optimizer = optim.Adam(gru.parameters(), lr=.001)
     loss_func = nn.CrossEntropyLoss(ignore_index=trainer.char_to_ix["<PAD>"])
 
+    overall_loss_cache = []
     loss_cache = []
     embeddings_cache = []
 
+
     # Training loop
-    for epoch in range(10):
-        for _ in range(100):
-            train_data, train_lengths, target_data = trainer.load_data()
+    for i in range(len(trainer.folds)):
+        trainer.prepare_training(i)
+        gru.apply(gru.init_weights)
+        for epoch in range(10):
+            for _ in range(100):
+                train_data, train_lengths, target_data = trainer.load_data()
 
-            train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in word] for word in train_data],
-                                        dtype=torch.long)
+                train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in word] for word in train_data],
+                                            dtype=torch.long)
 
-            output = gru(train_ix, train_lengths)
-            optimizer.zero_grad()
-            target = torch.tensor([trainer.char_to_ix[ch] for ch in target_data], dtype=torch.long)
-            output = output.view(-1, 26)
+                output = gru(train_ix, train_lengths)
+                optimizer.zero_grad()
+                target = torch.tensor([trainer.char_to_ix[ch] for ch in target_data], dtype=torch.long)
+                output = output.view(-1, 26)
 
-            loss = loss_func(output, target)
-            loss.backward()
-            optimizer.step()
+                loss = loss_func(output, target)
+                loss.backward()
+                optimizer.step()
 
-        print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
+            print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
+            loss_cache.append(loss.data.numpy())
 
-        # loss_cache.append(loss.data.numpy())
+        with torch.no_grad():
+            trainer.prepare_validation()
+            for _ in range(10):
+                validate_data, validate_lengths, validate_target = trainer.load_data(train=False)
+                validate_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in word] for word in validate_data],
+                                            dtype=torch.long)
 
+                output = gru(validate_ix, validate_lengths)
+                optimizer.zero_grad()
+                target = torch.tensor([trainer.char_to_ix[ch] for ch in validate_target], dtype=torch.long)
+                output = output.view(-1, 26)
+
+                loss = loss_func(output, target)
+
+            print 'Fold: ', i, '| validation loss: %.4f' % loss.data.numpy()
+            overall_loss_cache.append(loss.data.numpy())
+
+    final_loss = np.mean(overall_loss_cache)
+    print 'FINAL LOSS AFTER FULL CROSS VALIDATION: ', final_loss
 
     # with torch.no_grad():
     #     input = ""
