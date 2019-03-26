@@ -24,14 +24,10 @@ class Trainer(object):
     def set_data(self, data):
         data = data.split("\n")
         self.dataset = data[:-1]
-        for d in self.dataset:
-            if len(d) < 2:
-                self.dataset.remove(d)
         np.random.shuffle(self.dataset)
         partition_len = len(self.dataset)/10
         for i in range(0, len(self.dataset), partition_len):
             self.folds.append(self.dataset[i:i+partition_len])
-        self.folds = self.folds[:-1]
 
         letters = "abcdefghijklmnopqrstuvwxyz"
         self.char_to_ix = {char: i for i, char in enumerate(letters)}
@@ -136,7 +132,7 @@ if __name__=="__main__":
     gru.apply(gru.init_weights)
     print(gru)
 
-    optimizer = optim.Adam(gru.parameters(), lr=.001)
+    optimizer = optim.Adam(gru.parameters(), lr=.0005)
     loss_func = nn.CrossEntropyLoss(ignore_index=trainer.char_to_ix["<PAD>"])
 
     overall_loss_cache = []
@@ -148,7 +144,7 @@ if __name__=="__main__":
     for i in range(len(trainer.folds)):
         trainer.prepare_training(i)
         gru.apply(gru.init_weights)
-        for epoch in range(10):
+        for epoch in range(100):
             for _ in range(100):
                 train_data, train_lengths, target_data = trainer.load_data()
 
@@ -187,24 +183,24 @@ if __name__=="__main__":
     final_loss = np.mean(overall_loss_cache)
     print 'FINAL LOSS AFTER FULL CROSS VALIDATION: ', final_loss
 
-    # with torch.no_grad():
-    #     input = ""
-    #     print "Now the fun part :)"
-    #     while input != "done":
-    #         output = ""
-    #         input = raw_input("please give a prefix input: ")
-    #         if input != "done":
-    #             output += input
-    #             for _ in range(1):
-    #                 train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
-    #                 input_lens = []
-    #                 input_lens.append(len(input))
-    #                 intermediate = gru(train_ix, input_lens)
-    #                 predicted = torch.max(intermediate.data, 2)[1].numpy()
-    #                 print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
-    #                 index = ord('a') + predicted[0][-1]
-    #                 next = chr(index)
-    #                 print "Next letter by highest probability ", next
+    with torch.no_grad():
+        input = ""
+        print "Now the fun part :)"
+        while input != "done":
+            output = ""
+            input = raw_input("please give a prefix input: ")
+            if input != "done":
+                output += input
+                for _ in range(1):
+                    train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
+                    input_lens = []
+                    input_lens.append(len(input))
+                    intermediate = gru(train_ix, input_lens)
+                    predicted = torch.max(intermediate.data, 2)[1].numpy()
+                    print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
+                    index = ord('a') + predicted[0][-1]
+                    next = chr(index)
+                    print "Next letter by highest probability ", next
 
         # for letter in "abcdefghijklmnopqrstuvwxyz":
         #     embed_input = torch.tensor([trainer.char_to_ix[letter]], dtype=torch.long)
