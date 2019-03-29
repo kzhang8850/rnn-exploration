@@ -9,14 +9,12 @@ import matplotlib.pyplot as plt
 class Trainer(object):
 
     def __init__(self):
-        self.train_batch_size = 32
-        self.features = 26
-        self.test_batch_size = 100
+        self.train_batch_size = 100
+        self.features = None
+        self.test_batch_size = 9970
         self.training_set = None
         self.target_set = None
         self.dataset = None
-        self.folds = []
-        self.validation_fold = None
         self.data_index = 0
         self.char_to_ix = {}
 
@@ -24,29 +22,16 @@ class Trainer(object):
     def set_data(self, data):
         data = data.split("\n")
         self.dataset = data[:-1]
-        np.random.shuffle(self.dataset)
-        partition_len = len(self.dataset)/10
-        for i in range(0, len(self.dataset), partition_len):
-            self.folds.append(self.dataset[i:i+partition_len])
 
         letters = "abcdefghijklmnopqrstuvwxyz"
+        self.features = len(letters)
         self.char_to_ix = {char: i for i, char in enumerate(letters)}
         self.char_to_ix["<PAD>"] = 26
 
 
     def prepare_training(self, index):
-        self.validation_fold = self.folds[index]
-        self.dataset = []
-        for i in range(len(self.folds)):
-            if i != index:
-                for j in range(len(self.folds[i])):
-                    self.dataset.append(self.folds[i][j])
-
-
-    def prepare_validation(self):
-        self.dataset = self.validation_fold
+        np.random.shuffle(self.dataset)
         self.data_index = 0
-        self.validation_fold = None
 
 
     def load_data(self, train=True):
@@ -83,15 +68,16 @@ class Trainer(object):
 
 class GRU(nn.Module):
 
-    def __init__(self, v_size, i_size, h_size, o_size, pad_idx):
+    def __init__(self, v_size, i_size, l_size, h_size, o_size, pad_idx):
         super(GRU, self).__init__()
         self.embed = nn.Embedding(num_embeddings=v_size,
                                 embedding_dim=i_size,
                                 padding_idx=pad_idx)
         self.rnn = nn.GRU(input_size=i_size,
                         hidden_size=h_size,
-                        num_layers=1,
-                        batch_first=True)
+                        num_layers=l_size,
+                        batch_first=True,
+                        dropout=0.5 if l_size > 1 else 0)
         self.output = nn.Linear(h_size, o_size)
 
 
@@ -128,25 +114,26 @@ if __name__=="__main__":
         data = f.read()
     trainer.set_data(data)
 
-    gru = GRU(27, 2, 64, 26, trainer.char_to_ix["<PAD>"])
-    gru.apply(gru.init_weights)
-    print(gru)
+    hyper_layers = [1, 2, 3, 4]
+    hyper_hidden_units = [32, 64, 128, 256, 512, 1024]
 
-    optimizer = optim.Adam(gru.parameters(), lr=.0005)
-    loss_func = nn.CrossEntropyLoss(ignore_index=trainer.char_to_ix["<PAD>"])
-
-    overall_loss_cache = []
-    loss_cache = []
+    overall_loss_cache = {}
     embeddings_cache = []
 
-
     # Training loop
-    for i in range(len(trainer.folds)):
-        trainer.prepare_training(i)
-        gru.apply(gru.init_weights)
-        for epoch in range(100):
-            for _ in range(100):
-                train_data, train_lengths, target_data = trainer.load_data()
+    for num_layers in hyper_layers:
+        for num_hidden in hyper_hidden_units:
+            gru = GRU(trainer.features+1, 2, num_layers, num_hidden, trainer.features, trainer.char_to_ix["<PAD>"])
+            gru.apply(gru.init_weights)
+            print gru
+
+            optimizer = optim.Adam(gru.parameters())
+            loss_func = nn.CrossEntropyLoss(ignore_index=trainer.char_to_ix["<PAD>"])
+
+            trainer.prepare_training(-1)
+            loss_cache = []
+            for epoch in range(1024):
+                train_data, train_lengths, target_data = trainer.load_data(train=False)
 
                 train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in word] for word in train_data],
                                             dtype=torch.long)
@@ -154,53 +141,43 @@ if __name__=="__main__":
                 output = gru(train_ix, train_lengths)
                 optimizer.zero_grad()
                 target = torch.tensor([trainer.char_to_ix[ch] for ch in target_data], dtype=torch.long)
-                output = output.view(-1, 26)
+                output = output.view(-1, trainer.features)
 
                 loss = loss_func(output, target)
+                loss_cache.append(loss.data.numpy())
+                print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
+                loss_cache.append(loss.data.numpy())
+
                 loss.backward()
                 optimizer.step()
 
-            print 'Epoch: ', epoch, '| train loss: %.4f' % loss.data.numpy()
-            loss_cache.append(loss.data.numpy())
+            overall_loss_cache[(num_layers, num_hidden)] = loss_cache
 
-        with torch.no_grad():
-            trainer.prepare_validation()
-            for _ in range(10):
-                validate_data, validate_lengths, validate_target = trainer.load_data(train=False)
-                validate_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in word] for word in validate_data],
-                                            dtype=torch.long)
+    print "FINAL SUMMARY AFTER ALL TRAINING"
+    for combo, loss in overall_loss_cache.items():
+        layers, hidden = combo
+        print "LAYERS:", layers, "HIDDEN SIZE:", hidden, " - ", "FINAL LOSS:", loss[-1]
 
-                output = gru(validate_ix, validate_lengths)
-                optimizer.zero_grad()
-                target = torch.tensor([trainer.char_to_ix[ch] for ch in validate_target], dtype=torch.long)
-                output = output.view(-1, 26)
+    print "TRAINING FINISHED."
 
-                loss = loss_func(output, target)
-
-            print 'Fold: ', i, '| validation loss: %.4f' % loss.data.numpy()
-            overall_loss_cache.append(loss.data.numpy())
-
-    final_loss = np.mean(overall_loss_cache)
-    print 'FINAL LOSS AFTER FULL CROSS VALIDATION: ', final_loss
-
-    with torch.no_grad():
-        input = ""
-        print "Now the fun part :)"
-        while input != "done":
-            output = ""
-            input = raw_input("please give a prefix input: ")
-            if input != "done":
-                output += input
-                for _ in range(1):
-                    train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
-                    input_lens = []
-                    input_lens.append(len(input))
-                    intermediate = gru(train_ix, input_lens)
-                    predicted = torch.max(intermediate.data, 2)[1].numpy()
-                    print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
-                    index = ord('a') + predicted[0][-1]
-                    next = chr(index)
-                    print "Next letter by highest probability ", next
+    # with torch.no_grad():
+    #     input = ""
+    #     print "Now the fun part :)"
+    #     while input != "done":
+    #         output = ""
+    #         input = raw_input("please give a prefix input: ")
+    #         if input != "done":
+    #             output += input
+    #             for _ in range(1):
+    #                 train_ix = torch.tensor([[trainer.char_to_ix[ch] for ch in input]], dtype=torch.long)
+    #                 input_lens = []
+    #                 input_lens.append(len(input))
+    #                 intermediate = gru(train_ix, input_lens)
+    #                 predicted = torch.max(intermediate.data, 2)[1].numpy()
+    #                 print "distribution ", F.softmax(intermediate, dim=2)[0][-1]
+    #                 index = ord('a') + predicted[0][-1]
+    #                 next = chr(index)
+    #                 print "Next letter by highest probability ", next
 
         # for letter in "abcdefghijklmnopqrstuvwxyz":
         #     embed_input = torch.tensor([trainer.char_to_ix[letter]], dtype=torch.long)
