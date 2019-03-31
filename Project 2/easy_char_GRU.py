@@ -5,10 +5,22 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 
+"""
+An easy version of a character-level GRU network that is meant to train on
+a single word. It works quite easily, as expected.
+"""
 
 class Trainer(object):
+    """
+    The Data Pre-processing Class. Uses one-hot encoding to process data for the
+    network
+    """
 
     def __init__(self):
+        """
+        Variables for holding data and deciding batches
+        """
+
         self.train_batch_size = 32
         self.features = 26
         self.test_batch_size = 100
@@ -19,11 +31,19 @@ class Trainer(object):
 
 
     def set_data(self, data):
-        data = data.split(" ")[:-1]
+        """
+        Gets the data into the class
+        """
+
+        data = data.split(" ")[:-1] # removes the last empty element
         self.dataset = data
 
 
     def load_data(self, train=True):
+        """
+        Loads a batch of data as a torch tensor. Uses one-hot encoding
+        """
+
         batch_size = self.train_batch_size if train else self.test_batch_size
         self.training_set = np.empty([batch_size, 4, self.features])
         self.target_set = np.empty([batch_size * 4])
@@ -53,6 +73,10 @@ class Trainer(object):
 
 
     def one_hot_encoding(self, character):
+        """
+        converts a char to an array of one-hot encoded vectors
+        """
+
         one_hot = np.zeros([self.features])
         index = ord(character) - ord('a')
         one_hot[index] = 1
@@ -61,6 +85,10 @@ class Trainer(object):
 
 
     def one_hot_decoding(self, one_hot):
+        """
+        converts a one-hot encoded vector to a char
+        """
+
         decode = np.ravel(np.nonzero(one_hot))[0]
         index = ord('a') + decode
         character = chr(int(index))
@@ -69,8 +97,16 @@ class Trainer(object):
 
 
 class GRU(nn.Module):
+    """
+    The GRU network
+    """
 
     def __init__(self, i_size, h_size, o_size):
+        """
+        Network is input into GRU layer to get output and
+        into Linear layer to squash into feature set size
+        """
+
         super(GRU, self).__init__()
         self.rnn = nn.GRU(input_size=i_size,
                         hidden_size=h_size,
@@ -80,13 +116,13 @@ class GRU(nn.Module):
 
 
     def forward(self, input):
+        """
+        Chaining the layers together
+        """
+
         output, hidden = self.rnn(input, None)
         linearized = self.output(output)
         return linearized
-
-
-
-
 
 
 if __name__=="__main__":
@@ -95,6 +131,8 @@ if __name__=="__main__":
     print(gru)
 
     trainer = Trainer()
+
+    # the data is just the single word hello
     dummy_data = "hello " * 100
     trainer.set_data(dummy_data)
 
@@ -104,7 +142,7 @@ if __name__=="__main__":
     loss_cache = []
 
     # Training loop
-    for epoch in range(10):
+    for epoch in range(100):
         for _ in range(100):
             train_data, target_data = trainer.load_data()
 
@@ -124,6 +162,7 @@ if __name__=="__main__":
 
         loss_cache.append(loss.data.numpy())
 
+    # Testing the trained network by outputs on manual input testing
     with torch.no_grad():
         input = ""
         print "Now the fun part :)"
@@ -145,12 +184,12 @@ if __name__=="__main__":
 
             print "The output from giving an 'h' is: ", output
 
-
+    # Graphing loss
     plt.figure(1)
     plt.plot(loss_cache, linewidth=5.0)
-    plt.title('Char GRU: Loss Analysis')
+    plt.title('Easy Char GRU: Loss Analysis')
     plt.ylabel('Loss')
-    plt.axis([0, 100, -.001, 1])
+    plt.axis([0, 100, -.001, .1])
     plt.xlabel('Epochs')
 
     plt.show()
